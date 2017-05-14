@@ -14,10 +14,17 @@ ssWeatherManager.forecast = {} --day of week, low temp, high temp, weather condi
 ssWeatherManager.forecastLength = 8
 ssWeatherManager.weather = {}
 
+ssWeatherManager.CROP_MOISTURE_MAX = 25
+ssWeatherManager.CROP_MOISTURE_THRESHOLD = 20 -- able to harvest
+
 -- Load events
 source(g_seasons.modDir .. "src/events/ssWeatherManagerDailyEvent.lua")
 source(g_seasons.modDir .. "src/events/ssWeatherManagerHourlyEvent.lua")
 source(g_seasons.modDir .. "src/events/ssWeatherManagerHailEvent.lua")
+
+function ssWeatherManager:preLoad()
+    Environment.calculateGroundWetness = Utils.overwrittenFunction(Environment.calculateGroundWetness, ssWeatherManager.calculateGroundWetness)
+end
 
 function ssWeatherManager:load(savegame, key)
     -- Load or set default values
@@ -505,7 +512,7 @@ end
 
 function ssWeatherManager:isCropWet()
     if self.moistureEnabled then
-        return self.cropMoistureContent > 20 or g_currentMission.environment.timeSinceLastRain == 0
+        return self.cropMoistureContent > ssWeatherManager.CROP_MOISTURE_THRESHOLD or g_currentMission.environment.timeSinceLastRain == 0
     else
         return g_currentMission.environment.timeSinceLastRain < 2 * 60
     end
@@ -832,7 +839,7 @@ function ssWeatherManager:updateCropMoistureContent()
     -- increase crop Moisture in the first hour after rain has started
     if g_currentMission.environment.timeSinceLastRain == 0 and self.cropMoistureContent < 25 then
         if dayTime > self.weather[1].startDayTime and (dayTime - 60) > self.weather[1].startDayTime then
-            self.cropMoistureContent = 25
+            self.cropMoistureContent = ssWeatherManager.CROP_MOISTURE_MAX
         end
     end
 end
@@ -855,4 +862,11 @@ function ssWeatherManager:updateHail(day)
 
         g_server:broadcastEvent(ssWeatherManagerDailyEvent:new(self.weather[1]))
     end
+end
+
+-- vanilla assumes values in range 0.0 - 1.0 as return value
+function ssWeatherManager:calculateGroundWetness()
+local moisture, dry, wet = ssWeatherManager.cropMoistureContent, ssWeatherManager.CROP_MOISTURE_THRESHOLD, ssWeatherManager.CROP_MOISTURE_MAX
+
+    return Utils.clamp(moisture, 0, wet - dry) / (wet - dry)
 end
